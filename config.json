@@ -1,17 +1,17 @@
 {
-	"$schema": "./config.schema.json",
-	"port": 25565,
-	"host": "0.0.0.0",
-	"version": {
-		"name": "1.21.11",
-		"protocol": 774
-	},
-	"players": {
-		"max": 20,
-		"online": 0,
-		"sample": []
-	},
-	"motd": "A Minecraft Server",
-	"favicon": null,
-	"kickMessage": "You got kicked"
+  "$schema": "./config.schema.json",
+  "port": 25565,
+  "host": "0.0.0.0",
+  "version": {
+    "name": "1.21.11",
+    "protocol": 774
+  },
+  "players": {
+    "max": 20,
+    "online": 0,
+    "sample": []
+  },
+  "motd": "A Minecraft Server",
+  "favicon": null,
+  "kickMessage": "Test"
 }
