@@ -1,12 +1,17 @@
+use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::path::Path;
+
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 
 use color_eyre::Result;
 
-pub fn read_bytes(stream: &mut TcpStream, amount: usize) -> Vec<u8> {
+pub fn read_bytes(stream: &mut TcpStream, amount: usize) -> Result<Vec<u8>> {
     let mut buf = vec![0; amount];
-    stream.read_exact(&mut buf).expect("Error reading bytes");
-    buf
+    stream.read_exact(&mut buf)?;
+    Ok(buf)
 }
 
 pub fn read_byte(stream: &mut TcpStream) -> Result<u8> {
@@ -32,30 +37,36 @@ pub fn read_int(stream: &mut TcpStream) -> Result<u32> {
     ]))
 }
 
-pub fn read_long(stream: &mut TcpStream) -> i64 {
-    let bytes = read_bytes(stream, 8);
-    i64::from_be_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
-    ])
+pub fn read_int128(stream: &mut TcpStream) -> Result<u128> {
+    Ok(u128::from_be_bytes(
+        read_bytes(stream, 16)?.try_into().unwrap(),
+    ))
 }
 
-pub fn read_varint(stream: &mut TcpStream) -> i32 {
+pub fn read_long(stream: &mut TcpStream) -> Result<i64> {
+    let bytes = read_bytes(stream, 8)?;
+    Ok(i64::from_be_bytes([
+        bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+    ]))
+}
+
+pub fn read_varint(stream: &mut TcpStream) -> Result<i32> {
     let mut buf = [0];
     let mut ans = 0;
-    for i in 0..4 {
-        stream.read_exact(&mut buf).unwrap();
+    for i in 0..5 {
+        stream.read_exact(&mut buf)?;
         ans |= ((buf[0] & 0b0111_1111) as i32) << (7 * i);
         if buf[0] & 0b1000_0000 == 0 {
             break;
         }
     }
-    ans
+    Ok(ans)
 }
 
-pub fn read_utf8_string(stream: &mut TcpStream) -> String {
-    let len = read_varint(stream) as usize;
-    let data: Vec<u8> = read_bytes(stream, len);
-    String::from_utf8(data).unwrap_or_default()
+pub fn read_utf8_string(stream: &mut TcpStream) -> Result<String> {
+    let len = read_varint(stream)? as usize;
+    let data: Vec<u8> = read_bytes(stream, len)?;
+    Ok(String::from_utf8(data).unwrap_or_default())
 }
 
 pub fn read_utf16_string(stream: &mut TcpStream, chars: u16) -> Result<String> {
@@ -88,14 +99,40 @@ pub fn write_utf8_string(buffer: &mut Vec<u8>, value: String) {
     buffer.append(&mut data);
 }
 
-pub fn write_bytes_to_stream(stream: &mut TcpStream, bytes: Vec<u8>) {
-    stream
-        .write_all(bytes.as_slice())
-        .expect("Failed to write bytes to stream");
+pub fn write_bytes_to_stream(stream: &mut TcpStream, bytes: Vec<u8>) -> Result<()> {
+    stream.write_all(bytes.as_slice())?;
+    Ok(())
 }
 
-pub fn write_varint_to_stream(stream: &mut TcpStream, value: i32) {
+pub fn write_varint_to_stream(stream: &mut TcpStream, value: i32) -> Result<()> {
     let mut buf = Vec::new();
     write_varint(&mut buf, value);
-    write_bytes_to_stream(stream, buf);
+    write_bytes_to_stream(stream, buf)?;
+    Ok(())
+}
+
+pub fn format_uuid(value: u128) -> String {
+    let mut uuid = format!("{:0>32}", format!("{:x}", value));
+    // Format it to be XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+    uuid.insert(20, '-');
+    uuid.insert(16, '-');
+    uuid.insert(12, '-');
+    uuid.insert(8, '-');
+
+    uuid
+}
+
+pub fn read_favicon_from_file(path: &Path) -> Result<String> {
+    let bytes = read_bytes_from_file(path)?;
+    Ok("data:image/png;base64,".to_owned() + &BASE64_STANDARD.encode(bytes))
+}
+
+fn read_bytes_from_file(path: &Path) -> Result<Vec<u8>> {
+    let mut f = File::open(path)?;
+    let metadata = fs::metadata(path)?;
+    let size = metadata.len() as usize;
+    let mut buffer = vec![0; size];
+    f.read_exact(&mut buffer)?;
+
+    Ok(buffer)
 }

@@ -1,0 +1,86 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"title": "Config",
+	"type": "object",
+	"properties": {
+		"favicon": {
+			"type": ["string", "null"],
+			"default": null
+		},
+		"host": {
+			"type": "string",
+			"default": "0.0.0.0"
+		},
+		"motd": {
+			"type": "string",
+			"default": "A Minecraft Server"
+		},
+		"players": {
+			"$ref": "#/$defs/Players",
+			"default": {
+				"max": 20,
+				"online": 0,
+				"sample": []
+			}
+		},
+		"port": {
+			"type": "integer",
+			"format": "uint16",
+			"default": 25565,
+			"maximum": 65535,
+			"minimum": 0
+		},
+		"version": {
+			"$ref": "#/$defs/Version",
+			"default": {
+				"name": "1.21.11",
+				"protocol": 774
+			}
+		}
+	},
+	"$defs": {
+		"Players": {
+			"type": "object",
+			"properties": {
+				"max": {
+					"type": "integer",
+					"format": "int32"
+				},
+				"online": {
+					"type": "integer",
+					"format": "int32"
+				},
+				"sample": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/SamplePlayer"
+					}
+				}
+			}
+		},
+		"SamplePlayer": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"name": {
+					"type": "string"
+				}
+			},
+			"required": ["name", "id"]
+		},
+		"Version": {
+			"type": "object",
+			"properties": {
+				"name": {
+					"type": "string"
+				},
+				"protocol": {
+					"type": "integer",
+					"format": "int32"
+				}
+			}
+		}
+	}
+}

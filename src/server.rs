@@ -1,134 +1,136 @@
-use std::io::Read;
+use std::io::Write;
 use std::net::{Ipv4Addr, Shutdown, SocketAddrV4, TcpListener, TcpStream};
 use std::str::FromStr;
+use std::time::Duration;
 
-use color_eyre::Report;
-use color_eyre::eyre::{Ok, Result, eyre};
+use color_eyre::eyre::{Ok, Result};
 
-use crate::types::{Description, Players, ServerListPingResponse, Version};
+use crate::config::Config;
+use crate::types::{Description, KickPayload, ServerListPingResponse};
 use crate::utils::{
-    read_long, read_unsigned_short, read_utf8_string, write_bytes_to_stream, write_utf8_string,
-    write_varint, write_varint_to_stream,
+    read_long, read_unsigned_short, read_utf8_string, read_varint, write_bytes_to_stream,
+    write_utf8_string, write_varint, write_varint_to_stream,
 };
 
 pub struct MOTDServer {
-    port: u16,
+    config: Config,
 }
 
 impl MOTDServer {
-    pub fn new(port: u16) -> Self {
-        Self { port }
+    pub fn new(config: Config) -> Self {
+        Self { config }
     }
 
     pub fn start(self) -> Result<()> {
-        color_eyre::install();
+        color_eyre::install()?;
 
         let listener = TcpListener::bind(SocketAddrV4::new(
-            Ipv4Addr::from_str("127.0.0.1").unwrap(),
-            self.port,
+            Ipv4Addr::from_str(self.config.host.as_str()).unwrap(),
+            self.config.port,
         ))
         .unwrap();
 
-        println!("Running on port {}", self.port);
+        log::info!("Running on port {}", self.config.port);
 
         for stream in listener.incoming() {
-            Self::handle_connection(stream.unwrap());
+            Self::handle_connection(stream.unwrap(), self.config.clone());
         }
 
         Ok(())
     }
 
-    fn handle_connection(mut stream: TcpStream) {
+    fn handle_connection(mut stream: TcpStream, config: Config) {
         std::thread::spawn(move || {
-            if let Err(report) = Self::handle_ping(&mut stream) {
-                eprintln!("{}", report)
+            if let Err(report) = Self::handle_ping(&mut stream, config) {
+                log::error!("{}", report)
             }
         });
     }
 
-    fn handle_ping(stream: &mut TcpStream) -> Result<()> {
-        println!("--- New connection ---");
+    fn handle_ping(stream: &mut TcpStream, config: Config) -> Result<()> {
+        stream.set_read_timeout(Some(Duration::from_millis(200)))?;
 
         let mut buf: [u8; 1] = [0];
-        stream.peek(&mut buf);
+        stream.peek(&mut buf)?;
 
         if buf[0] == 0xFE {
-            println!("Legacy server list ping packet");
-            Self::handle_legacy_ping(stream).unwrap();
+            Self::handle_legacy_ping(stream, config).unwrap();
             return Ok(());
         }
 
-        let _len = read_varint(stream);
-        let _packet_id = read_varint(stream);
-        let _protocol_version = read_varint(stream);
-        let _server_address = read_utf8_string(stream);
-        let _server_port = read_unsigned_short(stream);
-        let next_state = read_varint(stream);
+        let _len = read_varint(stream)?;
+        let _packet_id = read_varint(stream)?;
+        let _protocol_version = read_varint(stream)?;
+        let _server_address = read_utf8_string(stream)?;
+        let _server_port = read_unsigned_short(stream).expect("Expected Server Port");
+        let next_state = read_varint(stream)?;
 
-        if next_state != 1 {
-            stream
-                .shutdown(Shutdown::Both)
-                .expect("Failed to shutdown stream");
-            return Err(eyre!("Client tried to join"));
+        if next_state == 2 {
+            let mut res_buf: Vec<u8> = Vec::new();
+
+            let res_json = serde_json::to_string(&KickPayload {
+                text: config.kick_message,
+            })
+            .unwrap();
+
+            write_varint(&mut res_buf, 0);
+            write_utf8_string(&mut res_buf, res_json);
+
+            let mut status_buf: Vec<u8> = Vec::new();
+            write_varint(&mut status_buf, res_buf.len() as i32);
+            status_buf.append(&mut res_buf);
+            write_bytes_to_stream(stream, status_buf)?;
+            stream.flush()?;
+
+            return Ok(());
         }
 
-        let _len = read_varint(stream);
-        let _packet_id = read_varint(stream);
-
         let res_json = serde_json::to_string(&ServerListPingResponse {
-            version: Version {
-                name: "1.21.11".to_string(),
-                protocol: 774,
-            },
-            players: Players {
-                max: 10,
-                online: 2,
-                sample: vec![],
-            },
-            description: Description {
-                text: "MOTD".to_string(),
-            },
-            favicon: None,
+            version: config.version,
+            players: config.players,
+            description: Description { text: config.motd },
+            favicon: config.favicon,
             enforces_secure_chat: false,
             previews_chat: true,
         })
         .unwrap();
 
+        let _len = read_varint(stream)?;
+        let _packet_id = read_varint(stream)?;
+        let payload = read_long(stream).unwrap_or(0);
+
         let mut res_buf: Vec<u8> = Vec::new();
         write_varint(&mut res_buf, 0);
         write_utf8_string(&mut res_buf, res_json);
 
-        write_varint_to_stream(stream, res_buf.len() as i32);
-        write_bytes_to_stream(stream, res_buf);
-
-        let mut len = [0];
-        match stream.read(&mut len).ok() {
-            Some(n) => {
-                if n == 0 {
-                    return Ok(());
-                }
-            }
-            None => {
-                return Err(eyre!("Failed to read from stream"));
-            }
-        };
-        let _packet_id = read_varint(stream);
-        let payload = read_long(stream);
+        let mut status_buf: Vec<u8> = Vec::new();
+        write_varint(&mut status_buf, res_buf.len() as i32);
+        status_buf.append(&mut res_buf);
+        write_bytes_to_stream(stream, status_buf)?;
+        stream.flush()?;
 
         let mut res_buf: Vec<u8> = Vec::new();
         write_varint(&mut res_buf, 1);
         res_buf.append(&mut payload.to_be_bytes().to_vec());
-        write_varint_to_stream(stream, res_buf.len() as i32);
-        write_bytes_to_stream(stream, res_buf);
+        write_varint_to_stream(stream, res_buf.len() as i32)?;
+        stream.flush()?;
+        write_bytes_to_stream(stream, res_buf)?;
+        stream.flush()?;
 
         stream.shutdown(Shutdown::Both)?;
 
         Ok(())
     }
 
-    fn handle_legacy_ping(stream: &mut TcpStream) -> Result<()> {
-        let res_string = format!("$1\0{}\0{}\0{}\0{}\0{}", "774", "1.21.11", "MOTD", 2, 10);
-        // let res_string = format!("$1\0{}\0{}\0{}\0{}\0{}", "78", "1.6", "MOTD", 2, 10);
+    fn handle_legacy_ping(stream: &mut TcpStream, config: Config) -> Result<()> {
+        let res_string = format!(
+            "$1\0{}\0{}\0{}\0{}\0{}",
+            config.version.protocol,
+            config.version.name,
+            config.motd,
+            config.players.online,
+            config.players.max
+        );
         let mut res_buf: Vec<u8> = Vec::new();
 
         res_buf.push(0xFF);
@@ -148,42 +150,11 @@ impl MOTDServer {
             res_buf.append(&mut data.align_to::<u8>().1.to_vec());
         }
 
-        write_bytes_to_stream(stream, res_buf);
+        write_bytes_to_stream(stream, res_buf)?;
+        stream.flush()?;
 
         stream.shutdown(Shutdown::Both).unwrap();
 
         Ok(())
     }
-}
-
-fn read_string(stream: &mut impl Read) -> String {
-    let len = read_varint(stream) as usize;
-    let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf).unwrap();
-    String::from_utf8(buf).unwrap()
-}
-
-fn read_varint(stream: &mut impl Read) -> i32 {
-    let mut num = 0i32;
-    let mut shift = 0;
-
-    loop {
-        let mut buf = [0u8; 1];
-        stream.read_exact(&mut buf).unwrap();
-        let byte = buf[0];
-
-        num |= ((byte & 0x7F) as i32) << shift;
-
-        if byte & 0x80 == 0 {
-            break;
-        }
-
-        shift += 7;
-
-        if shift > 35 {
-            panic!("VarInt too big");
-        }
-    }
-
-    num
 }

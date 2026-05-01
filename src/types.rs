@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 pub struct ServerListPingResponse {
@@ -13,26 +13,31 @@ pub struct ServerListPingResponse {
     pub previews_chat: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Version {
     pub name: String,
     pub protocol: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Players {
     pub max: i32,
     pub online: i32,
-    pub sample: Vec<Sample>,
+    pub sample: Vec<SamplePlayer>,
 }
 
-#[derive(Serialize)]
-pub struct Sample {
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SamplePlayer {
     pub name: String,
     pub id: String,
 }
 
 #[derive(Serialize)]
 pub struct Description {
+    pub text: String,
+}
+
+#[derive(Serialize)]
+pub struct KickPayload {
     pub text: String,
 }
