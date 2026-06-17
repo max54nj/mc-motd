@@ -6,7 +6,7 @@ use std::time::Duration;
 use color_eyre::eyre::{Ok, Result};
 
 use crate::config::Config;
-use crate::types::{Description, KickPayload, ServerListPingResponse};
+use crate::types::{KickPayload, ServerListPingResponse};
 use crate::utils::{
     read_long, read_unsigned_short, read_utf8_string, read_varint, write_bytes_to_stream,
     write_utf8_string, write_varint, write_varint_to_stream,
@@ -88,7 +88,7 @@ impl MOTDServer {
         let res_json = serde_json::to_string(&ServerListPingResponse {
             version: config.version,
             players: config.players,
-            description: Description { text: config.motd },
+            description: config.motd_json,
             favicon: config.favicon,
             enforces_secure_chat: false,
             previews_chat: true,

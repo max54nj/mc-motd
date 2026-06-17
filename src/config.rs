@@ -1,11 +1,12 @@
 use std::{fs, path::Path};
 
 use color_eyre::Result;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::types::{Players, Version};
+use crate::types::{ChatComponent, Players, Version};
 
-#[derive(Deserialize, Serialize, Clone)]
+#[derive(Deserialize, Serialize, Clone, JsonSchema)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     #[serde(rename = "$schema")]
@@ -15,6 +16,7 @@ pub struct Config {
     pub version: Version,
     pub players: Players,
     pub motd: String,
+    pub motd_json: ChatComponent,
     pub favicon: Option<String>,
     pub kick_message: String,
 }
@@ -59,6 +61,12 @@ impl Default for Config {
                 sample: vec![],
             },
             motd: "A Minecraft Server".to_string(),
+            motd_json: ChatComponent {
+                text: "A Minecraft Server".to_string(),
+                color: None,
+                bold: None,
+                extra: Some(vec![]),
+            },
             favicon: None,
             kick_message: "Disconnected".to_string(),
         }

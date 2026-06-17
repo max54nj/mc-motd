@@ -3,6 +3,10 @@
 	"title": "Config",
 	"type": "object",
 	"properties": {
+		"$schema": {
+			"type": "string",
+			"default": "./config.schema.json"
+		},
 		"favicon": {
 			"type": ["string", "null"],
 			"default": null
@@ -11,9 +15,20 @@
 			"type": "string",
 			"default": "0.0.0.0"
 		},
+		"kickMessage": {
+			"type": "string",
+			"default": "Disconnected"
+		},
 		"motd": {
 			"type": "string",
 			"default": "A Minecraft Server"
+		},
+		"motdJson": {
+			"$ref": "#/$defs/ChatComponent",
+			"default": {
+				"extra": [],
+				"text": "A Minecraft Server"
+			}
 		},
 		"players": {
 			"$ref": "#/$defs/Players",
@@ -38,7 +53,29 @@
 			}
 		}
 	},
+	"additionalProperties": false,
 	"$defs": {
+		"ChatComponent": {
+			"type": "object",
+			"properties": {
+				"bold": {
+					"type": ["boolean", "null"]
+				},
+				"color": {
+					"type": ["string", "null"]
+				},
+				"extra": {
+					"type": ["array", "null"],
+					"items": {
+						"$ref": "#/$defs/ChatComponent"
+					}
+				},
+				"text": {
+					"type": "string"
+				}
+			},
+			"required": ["text"]
+		},
 		"Players": {
 			"type": "object",
 			"properties": {
@@ -56,7 +93,8 @@
 						"$ref": "#/$defs/SamplePlayer"
 					}
 				}
-			}
+			},
+			"required": ["max", "online", "sample"]
 		},
 		"SamplePlayer": {
 			"type": "object",
@@ -80,7 +118,8 @@
 					"type": "integer",
 					"format": "int32"
 				}
-			}
+			},
+			"required": ["name", "protocol"]
 		}
 	}
 }
